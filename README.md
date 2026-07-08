@@ -9,16 +9,17 @@ Builds a production-pattern VPC from scratch: public and private subnets across 
 ```
 Internet
     |
-Internet Gateway (secure-devops-igw)
+Internet Gateway
     |
 Public Subnet AZ-A (10.0.1.0/24)     Public Subnet AZ-B (10.0.2.0/24)
+    |                                       |
+Bastion Host (EC2)                    (empty — reserved for HA)
     |
-Bastion Host (EC2, public IP)
-    | SSH agent-forwarded connection
-    v
+    | SSH tunnel through private network
+    |
 Private Subnet AZ-A (10.0.3.0/24)    Private Subnet AZ-B (10.0.4.0/24)
-    |
-Private EC2 (no public IP, no internet route)
+    |                                       |
+Private EC2 Instance               (empty — reserved for HA)
 ```
 
 - **VPC:** `secure-devops-vpc` — `10.0.0.0/16`
@@ -55,8 +56,10 @@ curl http://google.com --max-time 5
 
 **Issue:**
 <br/>`ssh -A -i ~/.ssh/id_rsa ubuntu@<bastion-ip>` failed — "Permission denied (publickey)."
+
 **Investigation:** 
 <br/>SSH agent confirmed the key was loaded correctly (`ssh-add -l` showed the fingerprint). The failure was specifically at authentication, not connectivity — pointed to a key mismatch rather than a security group issue.
+
 **Root cause:** 
 <br/>The bastion's key pair (`my-devops-key`) was originally created via EC2's "Create Key Pair" flow, which generates a brand-new key pair and hands you a `.pem` download — not the same key as the existing local `~/.ssh/id_rsa`. Confirmed by comparing fingerprints:
 ```bash

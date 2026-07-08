@@ -53,9 +53,12 @@ curl http://google.com --max-time 5
 
 ## Problems Faced & Fixes
 
-**Issue: `ssh -A -i ~/.ssh/id_rsa ubuntu@<bastion-ip>` failed — "Permission denied (publickey)."**
-**Investigation:** SSH agent confirmed the key was loaded correctly (`ssh-add -l` showed the fingerprint). The failure was specifically at authentication, not connectivity — pointed to a key mismatch rather than a security group issue.
-**Root cause:** The bastion's key pair (`my-devops-key`) was originally created via EC2's "Create Key Pair" flow, which generates a brand-new key pair and hands you a `.pem` download — not the same key as the existing local `~/.ssh/id_rsa`. Confirmed by comparing fingerprints:
+**Issue:**
+<br/>`ssh -A -i ~/.ssh/id_rsa ubuntu@<bastion-ip>` failed — "Permission denied (publickey)."
+**Investigation:** 
+<br/>SSH agent confirmed the key was loaded correctly (`ssh-add -l` showed the fingerprint). The failure was specifically at authentication, not connectivity — pointed to a key mismatch rather than a security group issue.
+**Root cause:** 
+<br/>The bastion's key pair (`my-devops-key`) was originally created via EC2's "Create Key Pair" flow, which generates a brand-new key pair and hands you a `.pem` download — not the same key as the existing local `~/.ssh/id_rsa`. Confirmed by comparing fingerprints:
 ```bash
 ssh-keygen -lf my-devops-key.pem
 ssh-keygen -lf ~/.ssh/id_rsa.pub
@@ -111,11 +114,16 @@ Succeeded immediately. `id_rsa` was left untouched, since it's still used by an 
 
 ## Notes & Interesting Details
 
-- **Why ports 1024–65535 in the NACL rules?** These are the *ephemeral port range* — when a client (like the bastion) opens a connection to a server, the server always replies to whatever random high-numbered port the client's OS picked for that specific connection, not to port 22. Because NACLs are **stateless** (unlike security groups), the NACL has no memory of "this reply belongs to a connection I already allowed" — it evaluates every packet independently in both directions. So an inbound rule allowing port 22 alone isn't enough; the *outbound* return traffic on that random ephemeral port must also be explicitly allowed, or the response never makes it back to the client. Security groups don't need this because they're stateful — they automatically permit return traffic for any connection they already approved.
-- **Why security groups + NACLs together?** Two independent layers an attacker has to defeat, not one. Security groups are attached to instances and are stateful; NACLs are attached to subnets and are stateless. A misconfiguration in one doesn't automatically expose the resource if the other layer still blocks it.
-- **Why chain `private-ec2-sg` to `bastion-sg` instead of an IP?** IP-based rules break the moment your IP changes (common with home ISPs). Referencing a security group as the source means "only traffic originating from something in this specific SG is allowed" — regardless of what IP that resource currently has. This is an AWS-specific pattern that plain IP firewalls can't replicate.
-- **Why no NAT Gateway?** NAT Gateways cost money per hour plus data processed. The bastion host pattern achieves the same goal (controlled access into a private network) at zero cost — appropriate for a Free Tier practice project, though NAT Gateways are still common in real production setups where the private instance itself needs to reach the internet (e.g. downloading packages) without a human in the loop.
-- **SSH agent forwarding (`-A` flag):** lets the bastion authenticate to the private instance using the key held on the *local* machine, without ever copying the private key onto the bastion itself. If the bastion were ever compromised, the private key was never there to steal.
+- **Why ports 1024–65535 in the NACL rules?** 
+<br/>These are the *ephemeral port range* — when a client (like the bastion) opens a connection to a server, the server always replies to whatever random high-numbered port the client's OS picked for that specific connection, not to port 22. Because NACLs are **stateless** (unlike security groups), the NACL has no memory of "this reply belongs to a connection I already allowed" — it evaluates every packet independently in both directions. So an inbound rule allowing port 22 alone isn't enough; the *outbound* return traffic on that random ephemeral port must also be explicitly allowed, or the response never makes it back to the client. Security groups don't need this because they're stateful — they automatically permit return traffic for any connection they already approved.
+- **Why security groups + NACLs together?** 
+<br/>Two independent layers an attacker has to defeat, not one. Security groups are attached to instances and are stateful; NACLs are attached to subnets and are stateless. A misconfiguration in one doesn't automatically expose the resource if the other layer still blocks it.
+- **Why chain `private-ec2-sg` to `bastion-sg` instead of an IP?** 
+<br/>IP-based rules break the moment your IP changes (common with home ISPs). Referencing a security group as the source means "only traffic originating from something in this specific SG is allowed" — regardless of what IP that resource currently has. This is an AWS-specific pattern that plain IP firewalls can't replicate.
+- **Why no NAT Gateway?** 
+<br/>NAT Gateways cost money per hour plus data processed. The bastion host pattern achieves the same goal (controlled access into a private network) at zero cost — appropriate for a Free Tier practice project, though NAT Gateways are still common in real production setups where the private instance itself needs to reach the internet (e.g. downloading packages) without a human in the loop.
+- **SSH agent forwarding (`-A` flag):** 
+<br/>lets the bastion authenticate to the private instance using the key held on the *local* machine, without ever copying the private key onto the bastion itself. If the bastion were ever compromised, the private key was never there to steal.
 
 ## Cost Reminder
 
